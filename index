@@ -1,0 +1,348 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Queer Visible Avatar Maker</title>
+  
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #f4f7fa;
+      margin: 0;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .card {
+      background: white;
+      padding: 2rem;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+
+    h1 {
+      color: #4A90E2;
+      margin-bottom: 1rem;
+    }
+
+    .dropzone {
+      border: 2px dashed #ccc;
+      border-radius: 12px;
+      padding: 1rem;
+      background: #f9f9f9;
+      cursor: pointer;
+      margin-bottom: 1rem;
+      padding: 80px;
+    }
+
+    canvas {
+      max-width: 100%;
+      border-radius: 16px;
+      cursor: grab;
+      margin: 1rem 0;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 1rem;
+      text-align: left;
+    }
+
+    select, input[type="range"] {
+      width: 100%;
+      margin-top: 0.25rem;
+      margin-bottom: 1rem;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    button {
+      background: #4A90E2;
+      color: white;
+      padding: 0.8rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #357ABD;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Queer Avatar Maker 🏳️‍🌈</h1>
+
+  <div class="card">
+    <div class="dropzone" id="dropZone">📂 Bild hier ablegen oder klicken</div>
+    <input type="file" id="imageInput" accept="image/*" hidden />
+
+    <label for="flagSelect">Flagge:</label>
+    <select id="flagSelect">
+      <option value="trans">🏳️‍⚧️ Trans-Flagge</option>
+      <option value="rainbow">🏳️‍🌈 Regenbogen-Flagge</option>
+      <option value="nonbinary">🟨 Non-Binary</option>
+      <option value="pansexual">💗💛💙 Pansexuell</option>
+      <option value="asexual">⚫⚪🟣 Asexuell</option>
+      <option value="intersex">🟨🟣 Intersexuell</option>
+      <option value="genderfluid">🎨 Genderfluid</option>
+      <option value="agender">⚫⚪🟩 Agender</option>
+    </select>
+
+    <label for="shapeSelect">Form des Gesamtbildes:</label>
+    <select id="shapeSelect">
+      <option value="circle">🔵 Rund</option>
+      <option value="square">◼️ Eckig</option>
+    </select>
+
+    <label for="avatarShapeSelect">Avatar-Form:</label>
+    <select id="avatarShapeSelect">
+      <option value="circle">Kreis</option>
+      <option value="square">Quadrat</option>
+    </select>
+
+    <label for="avatarSizeSlider">Avatar-Größe im Bild:</label>
+    <input type="range" id="avatarSizeSlider" min="0.4" max="1" step="0.01" value="0.8" />
+
+    <label for="zoomSlider">Avatar-Zoom:</label>
+    <input type="range" id="zoomSlider" min="1" max="3" step="0.01" value="1.5" />
+
+    <canvas id="previewCanvas" width="400" height="400"></canvas>
+    <canvas id="exportCanvas" width="400" height="400" style="display: none;"></canvas>
+
+    <button id="exportBtn">⬇️ Als PNG speichern</button>
+  </div>
+
+  <script>
+    const previewCanvas = document.getElementById("previewCanvas");
+    const previewCtx = previewCanvas.getContext("2d");
+    const exportCanvas = document.getElementById("exportCanvas");
+    const exportCtx = exportCanvas.getContext("2d");
+
+    const imageInput = document.getElementById("imageInput");
+    const dropZone = document.getElementById("dropZone");
+    const flagSelect = document.getElementById("flagSelect");
+    const shapeSelect = document.getElementById("shapeSelect");
+    const avatarShapeSelect = document.getElementById("avatarShapeSelect");
+    const zoomSlider = document.getElementById("zoomSlider");
+    const avatarSizeSlider = document.getElementById("avatarSizeSlider");
+    const exportBtn = document.getElementById("exportBtn");
+
+    // Flaggenfarben
+    const flags = {
+      trans: ["#5BCEFA", "#F5A9B8", "#FFFFFF", "#F5A9B8", "#5BCEFA"],
+      rainbow: ["#E40303", "#FF8C00", "#FFED00", "#008026", "#004DFF", "#750787"],
+      nonbinary: ["#FFF430", "#FFFFFF", "#9C59D1", "#000000"],
+      pansexual: ["#FF218C", "#FFD800", "#21B1FF"],
+      asexual: ["#000000", "#A4A4A4", "#FFFFFF", "#800080"],
+      intersex: ["#FFD800"], // Gelber Hintergrund, lila Kreis extra
+      genderfluid: ["#FF75A2", "#FFFFFF", "#BE18D6", "#000000", "#333EBF"],
+      agender: ["#000000", "#BEBEBE", "#FFFFFF", "#00FF00"]
+    };
+
+    let avatarImage = null;
+    let imgOffset = { x: 0, y: 0 };
+    let dragStart = null;
+    let zoom = parseFloat(zoomSlider.value);
+    let avatarSize = parseFloat(avatarSizeSlider.value);
+
+    // Hintergrund zeichnen
+    function drawFlagBackground(ctx, colors) {
+      const stripeHeight = ctx.canvas.height / colors.length;
+      colors.forEach((color, i) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(0, i * stripeHeight, ctx.canvas.width, stripeHeight);
+      });
+    }
+
+    // Intersex-Flagge (gelber Hintergrund + lila Kreis in der Mitte)
+    function drawIntersexFlag(ctx) {
+      ctx.fillStyle = flags.intersex[0];
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.beginPath();
+      const radius = ctx.canvas.width * 0.15;
+      ctx.arc(ctx.canvas.width / 2, ctx.canvas.height / 2, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#8A00D4"; // Lila Kreis
+      ctx.fill();
+    }
+
+    function drawAvatar(ctx, withBorder = false) {
+      if (!avatarImage) return;
+
+      const avatarShape = avatarShapeSelect.value;
+      const cropSize = ctx.canvas.width * avatarSize;
+      const centerX = ctx.canvas.width / 2;
+      const centerY = ctx.canvas.height / 2;
+
+      const drawSize = cropSize * zoom;
+
+      const aspect = avatarImage.width / avatarImage.height;
+      let drawW, drawH;
+
+      if (aspect > 1) {
+        drawW = drawSize * aspect;
+        drawH = drawSize;
+      } else {
+        drawW = drawSize;
+        drawH = drawSize / aspect;
+      }
+
+      const drawX = centerX - drawW / 2 - imgOffset.x;
+      const drawY = centerY - drawH / 2 - imgOffset.y;
+
+      ctx.save();
+      if (avatarShape === "circle") {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, cropSize / 2, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+      } else {
+        ctx.beginPath();
+        ctx.rect(centerX - cropSize / 2, centerY - cropSize / 2, cropSize, cropSize);
+        ctx.closePath();
+        ctx.clip();
+      }
+
+      ctx.drawImage(avatarImage, drawX, drawY, drawW, drawH);
+      ctx.restore();
+
+      if (withBorder) {
+        ctx.beginPath();
+        if (avatarShape === "circle") {
+          ctx.arc(centerX, centerY, cropSize / 2, 0, Math.PI * 2);
+        } else {
+          ctx.rect(centerX - cropSize / 2, centerY - cropSize / 2, cropSize, cropSize);
+        }
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "white";
+        ctx.stroke();
+      }
+    }
+
+    function drawCanvas(ctx, withBorder = false) {
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+      // Runder Clip für das Gesamtbild (Flagge + Avatar), wenn gewünscht
+      if (shapeSelect.value === "circle") {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ctx.canvas.width / 2, ctx.canvas.height / 2, ctx.canvas.width / 2, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+      }
+
+      if (flagSelect.value === "intersex") {
+        drawIntersexFlag(ctx);
+      } else {
+        const colors = flags[flagSelect.value];
+        drawFlagBackground(ctx, colors);
+      }
+
+      drawAvatar(ctx, withBorder);
+
+      if (shapeSelect.value === "circle") {
+        ctx.restore();
+      }
+
+      ctx.canvas.style.borderRadius = shapeSelect.value === "circle" ? "50%" : "16px";
+    }
+
+    function drawPreview() {
+      drawCanvas(previewCtx, true);
+    }
+
+    function drawExport() {
+      drawCanvas(exportCtx, false);
+    }
+
+    function loadImage(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        avatarImage = new Image();
+        avatarImage.onload = () => {
+          imgOffset = { x: 0, y: 0 };
+          zoom = parseFloat(zoomSlider.value);
+          avatarSize = parseFloat(avatarSizeSlider.value);
+          drawPreview();
+        };
+        avatarImage.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    dropZone.addEventListener("click", () => imageInput.click());
+    dropZone.addEventListener("dragover", e => e.preventDefault());
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]);
+    });
+    imageInput.addEventListener("change", e => {
+      if (e.target.files[0]) loadImage(e.target.files[0]);
+    });
+
+    [flagSelect, shapeSelect, avatarShapeSelect].forEach(el =>
+      el.addEventListener("change", drawPreview)
+    );
+
+    zoomSlider.addEventListener("input", e => {
+      zoom = parseFloat(e.target.value);
+      drawPreview();
+    });
+
+    avatarSizeSlider.addEventListener("input", e => {
+      avatarSize = parseFloat(e.target.value);
+      drawPreview();
+    });
+
+    // Drag Avatar Image innerhalb Canvas
+    previewCanvas.addEventListener("mousedown", e => {
+      dragStart = { x: e.offsetX, y: e.offsetY };
+      previewCanvas.style.cursor = "grabbing";
+    });
+
+    previewCanvas.addEventListener("mouseup", e => {
+      dragStart = null;
+      previewCanvas.style.cursor = "grab";
+    });
+
+    previewCanvas.addEventListener("mouseleave", e => {
+      dragStart = null;
+      previewCanvas.style.cursor = "grab";
+    });
+
+    previewCanvas.addEventListener("mousemove", e => {
+      if (!dragStart || !avatarImage) return;
+      const dx = e.offsetX - dragStart.x;
+      const dy = e.offsetY - dragStart.y;
+      imgOffset.x -= dx;
+      imgOffset.y -= dy;
+      dragStart = { x: e.offsetX, y: e.offsetY };
+      drawPreview();
+    });
+
+    exportBtn.addEventListener("click", () => {
+      exportCanvas.width = previewCanvas.width;
+      exportCanvas.height = previewCanvas.height;
+      drawExport();
+
+      exportCanvas.toBlob(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "queerified-avatar.png";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    });
+  </script>
+</body>
+</html>
