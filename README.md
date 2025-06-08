@@ -15,4 +15,4 @@
 - ✅ Zoomen, Verschieben etc
 - ✅ Einfache bedienung
 
-[Jetzt erstellen](https://dein-link-zum-tool.com](https://xrqueer.github.io/pridemaker/)
+[Jetzt erstellen](https://xrqueer.github.io/pridemaker/)
